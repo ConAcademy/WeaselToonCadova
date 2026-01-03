@@ -70,12 +70,9 @@ struct Dims {
 // =============================================================================
 
 /// Creates a pontoon nose cone with realistic bulbous shape
-/// - Parameters:
-///   - diameter: Float diameter
-///   - length: Nose cone length
 func noseCone(diameter: Double, length: Double) -> any Geometry3D {
     // The TPB nose cones have a distinctive bulbous shape that tapers to a point
-    Loft(.resampled(.easeInOut)) {
+    Loft(interpolation: .smootherstep) {
         // Back (blunt end with strengthening recess)
         layer(z: 0) {
             Circle(diameter: diameter)
@@ -110,25 +107,27 @@ func noseCone(diameter: Double, length: Double) -> any Geometry3D {
 
 /// Creates a pontoon straight section cylinder
 func straightSection(diameter: Double, length: Double) -> any Geometry3D {
-    // The straight sections have subtle ribbing/reinforcement rings
-    // We'll add visual detail with slight bulges at regular intervals
+    // Main cylinder body with reinforcement ribs
     let ribSpacing: Double = 6.0
     let ribCount = Int(length / ribSpacing)
     
-    return Group {
-        // Main cylinder body
-        Cylinder(diameter: diameter, height: length)
-        
-        // Add reinforcement ribs (subtle visual detail)
-        for i in 1..<ribCount {
-            let ribPos = Double(i) * ribSpacing
-            Ring(outerDiameter: diameter + 0.3, innerDiameter: diameter - 0.1)
-                .extruded(height: 0.5)
-                .translated(z: ribPos)
-        }
+    // Start with main cylinder
+    var result: any Geometry3D = Cylinder(diameter: diameter, height: length)
+        .rotated(x: -90°)
+        .colored(.orange)
+    
+    // Add reinforcement ribs (subtle visual detail)
+    for i in 1..<ribCount {
+        let ribPos = Double(i) * ribSpacing
+        let rib = Ring(outerDiameter: diameter + 0.3, innerDiameter: diameter - 0.1)
+            .extruded(height: 0.5)
+            .rotated(x: -90°)
+            .translated(y: ribPos)
+            .colored(.orange)
+        result = result.adding { rib }
     }
-    .rotated(x: -90°)
-    .colored(.orange)
+    
+    return result
 }
 
 /// Creates a complete pontoon assembly with nose cone and straights
@@ -140,31 +139,47 @@ func pontoonAssembly(
     hasFrontNose: Bool = true,
     hasRearNose: Bool = false
 ) -> any Geometry3D {
-    var yOffset: Double = 0.0
+    // Start building the pontoon
+    var result: any Geometry3D = Box(0.001)  // Dummy starting point
+    var isFirst = true
     
-    return Group {
-        // Rear nose cone (if applicable)
-        if hasRearNose {
-            noseCone(diameter: diameter, length: noseConeLength)
-                .rotated(x: -90°)  // Point backward
-                .translated(y: 0)
-            // Adjust offset
-            // yOffset = noseConeLength (but we start straights after)
-        }
-        
-        // Straight sections
-        for i in 0..<straightCount {
-            straightSection(diameter: diameter, length: straightLength)
-                .translated(y: Double(i) * straightLength)
-        }
-        
-        // Front nose cone
-        if hasFrontNose {
-            noseCone(diameter: diameter, length: noseConeLength)
-                .rotated(x: 90°)  // Point forward
-                .translated(y: Double(straightCount) * straightLength)
+    // Rear nose cone (if applicable)
+    if hasRearNose {
+        let rearNose = noseCone(diameter: diameter, length: noseConeLength)
+            .rotated(x: -90°)  // Point backward
+        if isFirst {
+            result = rearNose
+            isFirst = false
+        } else {
+            result = result.adding { rearNose }
         }
     }
+    
+    // Straight sections
+    for i in 0..<straightCount {
+        let yOffset = hasRearNose ? noseConeLength + Double(i) * straightLength : Double(i) * straightLength
+        let straight = straightSection(diameter: diameter, length: straightLength)
+            .translated(y: yOffset)
+        if isFirst {
+            result = straight
+            isFirst = false
+        } else {
+            result = result.adding { straight }
+        }
+    }
+    
+    // Front nose cone
+    if hasFrontNose {
+        let frontYOffset = hasRearNose 
+            ? noseConeLength + Double(straightCount) * straightLength 
+            : Double(straightCount) * straightLength
+        let frontNose = noseCone(diameter: diameter, length: noseConeLength)
+            .rotated(x: 90°)  // Point forward
+            .translated(y: frontYOffset)
+        result = result.adding { frontNose }
+    }
+    
+    return result
 }
 
 /// Main 27" pontoon (single-nose configuration for 15' boat)
@@ -212,40 +227,8 @@ func mainBeamProfile() -> any Geometry2D {
         }
 }
 
-/// Hat channel profile (cross-section) - trapezoidal with flanges
+/// Simplified hat channel profile (cross-section)
 func hatChannelProfile() -> any Geometry2D {
-    let h = Dims.HatChannel.height
-    let topW = Dims.HatChannel.topWidth
-    let botW = Dims.HatChannel.bottomWidth
-    let flangeW = Dims.HatChannel.flangeWidth
-    let t = Dims.HatChannel.thickness
-    
-    // Create hat channel shape using path
-    // The profile looks like: _/¯¯¯¯\_  (flanges, sloped sides, flat top)
-    Polygon([
-        // Left flange
-        Vector2D(-botW/2 - flangeW, 0),
-        Vector2D(-botW/2 - flangeW, t),
-        Vector2D(-botW/2, t),
-        // Left slope up to top
-        Vector2D(-topW/2, h),
-        // Top
-        Vector2D(topW/2, h),
-        // Right slope down
-        Vector2D(botW/2, t),
-        // Right flange
-        Vector2D(botW/2 + flangeW, t),
-        Vector2D(botW/2 + flangeW, 0),
-        // Back across bottom (no bottom plate)
-        Vector2D(topW/2 - t, 0),
-        Vector2D(topW/2 - t, h - t),
-        Vector2D(-topW/2 + t, h - t),
-        Vector2D(-topW/2 + t, 0),
-    ])
-}
-
-/// Simplified hat channel using rectangles (easier to render)
-func hatChannelProfileSimple() -> any Geometry2D {
     let h = Dims.HatChannel.height
     let topW = Dims.HatChannel.topWidth
     let flangeW = Dims.HatChannel.flangeWidth
@@ -259,6 +242,8 @@ func hatChannelProfileSimple() -> any Geometry2D {
             Rectangle(x: flangeW, y: t)
                 .aligned(at: .maxX, .bottom)
                 .translated(x: -topW/2)
+        }
+        .adding {
             // Right flange
             Rectangle(x: flangeW, y: t)
                 .aligned(at: .minX, .bottom)
@@ -268,12 +253,12 @@ func hatChannelProfileSimple() -> any Geometry2D {
 
 /// Hat channel crossmember (full 3D)
 func hatChannel(length: Double = Dims.HatChannel.length) -> any Geometry3D {
-    hatChannelProfileSimple()
+    hatChannelProfile()
         .extruded(height: length)
         .rotated(y: 90°)
         .rotated(z: 180°)
         .translated(x: length/2)
-        .withMaterial(.aluminum)
+        .withMaterial(.steel)
 }
 
 /// Square tube (front crossmember)
@@ -290,7 +275,7 @@ func squareTube(length: Double) -> any Geometry3D {
         .extruded(height: length)
         .rotated(y: 90°)
         .translated(x: length/2)
-        .withMaterial(.aluminum)
+        .withMaterial(.steel)
 }
 
 /// Main beam extrusion
@@ -298,7 +283,7 @@ func mainBeam(length: Double) -> any Geometry3D {
     mainBeamProfile()
         .extruded(height: length)
         .rotated(x: -90°)
-        .withMaterial(.aluminum)
+        .withMaterial(.steel)
 }
 
 // =============================================================================
@@ -317,34 +302,44 @@ func frameAssembly() -> any Geometry3D {
     
     // Crossmember positions (evenly distributed)
     let crossmemberSpacing = length / Double(Dims.crossmemberCount)
+    let channelOffset = Dims.Main.channelSpacing / 2
     
-    return Group {
-        // Main beams - two pairs (one pair per pontoon, matching dual channels)
-        let channelOffset = Dims.Main.channelSpacing / 2
-        
-        // Port side main beams (dual)
-        mainBeam(length: length)
-            .translated(x: -spacing/2 - channelOffset, z: frameZ)
+    // Start with port side main beams
+    var result: any Geometry3D = mainBeam(length: length)
+        .translated(x: -spacing/2 - channelOffset, z: frameZ)
+    
+    result = result.adding {
         mainBeam(length: length)
             .translated(x: -spacing/2 + channelOffset, z: frameZ)
-        
-        // Starboard side main beams (dual)
+    }
+    
+    // Starboard side main beams
+    result = result.adding {
         mainBeam(length: length)
             .translated(x: spacing/2 - channelOffset, z: frameZ)
+    }
+    
+    result = result.adding {
         mainBeam(length: length)
             .translated(x: spacing/2 + channelOffset, z: frameZ)
-        
-        // Front square tube crossmember
+    }
+    
+    // Front square tube crossmember
+    result = result.adding {
         squareTube(length: spacing + 10)
             .translated(x: -spacing/2 - 5, y: length - 2, z: frameZ + beamH)
-        
-        // Hat channel crossmembers
-        for i in 0..<Dims.crossmemberCount {
-            let yPos = 3.0 + Double(i) * crossmemberSpacing
+    }
+    
+    // Hat channel crossmembers
+    for i in 0..<Dims.crossmemberCount {
+        let yPos = 3.0 + Double(i) * crossmemberSpacing
+        result = result.adding {
             hatChannel(length: spacing + 10)
                 .translated(x: -spacing/2 - 5, y: yPos, z: frameZ + beamH)
         }
     }
+    
+    return result
 }
 
 /// Motor mount / transom bracket (simplified)
@@ -356,7 +351,7 @@ func transomBracket() -> any Geometry3D {
     // Simple L-bracket shape for motor mount
     Box(x: w, y: d, z: h)
         .aligned(at: .centerX, .minY, .minZ)
-        .withMaterial(.aluminum)
+        .withMaterial(.steel)
 }
 
 /// Complete pontoon boat assembly
@@ -366,9 +361,6 @@ func pontoonBoatComplete() -> any Geometry3D {
     let spacing = Dims.mainPontoonCenterToCenter
     
     // Aux pontoon positions - arranged in a 2x2 pattern in the center
-    // Based on your Fusion 360 renders, they're positioned:
-    // - Two pairs, each pair has nose cones pointing outward (forward and aft)
-    // - Positioned between the main pontoons
     let auxXSpacing: Double = 22.0  // Horizontal spacing between aux pontoon pairs
     let auxYFront: Double = 50.0    // Y position of front aux pair
     let auxYRear: Double = 120.0    // Y position of rear aux pair
@@ -376,42 +368,53 @@ func pontoonBoatComplete() -> any Geometry3D {
     // Aux pontoons sit lower than main pontoons
     let auxZ = mainDia/2 - auxDia/2 - 5.0
     
-    return Group {
-        // === MAIN PONTOONS ===
-        // Port (left) main pontoon
-        main27Pontoon()
-            .translated(x: -spacing/2, z: mainDia/2)
-        
-        // Starboard (right) main pontoon
+    // Start with port main pontoon
+    var result: any Geometry3D = main27Pontoon()
+        .translated(x: -spacing/2, z: mainDia/2)
+    
+    // Starboard main pontoon
+    result = result.adding {
         main27Pontoon()
             .translated(x: spacing/2, z: mainDia/2)
-        
-        // === AUXILIARY PONTOONS (4 total in center) ===
-        // These are the 18" pontoons arranged in a 2x2 pattern
-        
-        // Front pair (nose cones pointing forward)
+    }
+    
+    // === AUXILIARY PONTOONS (4 total in center) ===
+    // Front pair
+    result = result.adding {
         aux18Pontoon()
             .translated(x: -auxXSpacing/2, y: auxYFront - 40, z: auxZ)
-        
+    }
+    
+    result = result.adding {
         aux18Pontoon()
             .translated(x: auxXSpacing/2, y: auxYFront - 40, z: auxZ)
-        
-        // Rear pair (nose cones pointing backward - rotated)
+    }
+    
+    // Rear pair (rotated to face backward)
+    result = result.adding {
         aux18Pontoon()
             .rotated(z: 180°)
             .translated(x: -auxXSpacing/2, y: auxYRear + 60, z: auxZ)
-        
+    }
+    
+    result = result.adding {
         aux18Pontoon()
             .rotated(z: 180°)
             .translated(x: auxXSpacing/2, y: auxYRear + 60, z: auxZ)
-        
-        // === FRAME ===
+    }
+    
+    // Frame assembly
+    result = result.adding {
         frameAssembly()
-        
-        // === TRANSOM / MOTOR MOUNT ===
+    }
+    
+    // Transom / motor mount
+    result = result.adding {
         transomBracket()
             .translated(y: 5, z: mainDia/2 + Dims.MainBeam.height + 2)
     }
+    
+    return result
 }
 
 // =============================================================================
@@ -462,9 +465,9 @@ func exportAuxPontoon() -> any Geometry3D {
 @main
 struct PontoonBoatApp {
     static func main() async throws {
-        print("=" * 60)
+        print(String(repeating: "=", count: 60))
         print("Pontoon Boat 3D Model Generator")
-        print("=" * 60)
+        print(String(repeating: "=", count: 60))
         print("")
         print("Boat Specifications:")
         print("  Overall: 8' x 15' (96\" x 180\")")
@@ -523,15 +526,8 @@ struct PontoonBoatApp {
         }
         
         print("")
-        print("=" * 60)
+        print(String(repeating: "=", count: 60))
         print("Done! View .3mf files in Cadova Viewer or Bambu Studio")
-        print("=" * 60)
-    }
-}
-
-// Helper to repeat strings
-extension String {
-    static func * (left: String, right: Int) -> String {
-        return String(repeating: left, count: right)
+        print(String(repeating: "=", count: 60))
     }
 }
