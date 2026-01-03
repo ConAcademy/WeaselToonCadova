@@ -1,0 +1,60 @@
+{
+  "originHash" : "0b61490a735c0d361ec0b94776c1d1a94b3befd59659ad8d5490d1a7ed56a3b1",
+  "pins" : [
+    {
+      "identity" : "apus",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/tomasf/Apus.git",
+      "state" : {
+        "revision" : "7094e92897a4630375d46c9d2cc7d9408f7b7abe",
+        "version" : "0.1.2"
+      }
+    },
+    {
+      "identity" : "cadova",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/tomasf/Cadova.git",
+      "state" : {
+        "revision" : "c18b67bb1ae12d574ba25f6e1b4a996d9e5d3085",
+        "version" : "0.4.1"
+      }
+    },
+    {
+      "identity" : "manifold-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/tomasf/manifold-swift.git",
+      "state" : {
+        "revision" : "8d030bc8bf11b274f7dfbc1215ad04f74098b38b",
+        "version" : "0.2.3"
+      }
+    },
+    {
+      "identity" : "nodal",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/tomasf/Nodal.git",
+      "state" : {
+        "revision" : "275b8efd1d36d45154759a19e8cad709c2a36c64",
+        "version" : "0.4.1"
+      }
+    },
+    {
+      "identity" : "threemf",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/tomasf/ThreeMF.git",
+      "state" : {
+        "revision" : "d31fdea80c561b87983928b01fb8565cccde2382",
+        "version" : "0.2.2"
+      }
+    },
+    {
+      "identity" : "zip",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/tomasf/Zip.git",
+      "state" : {
+        "revision" : "89a20ecc82eddf3d1cb40b55e2143167ee4367d3",
+        "version" : "2.1.1"
+      }
+    }
+  ],
+  "version" : 3
+}
