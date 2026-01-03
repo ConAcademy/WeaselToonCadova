@@ -17,5 +17,10 @@ let package = Package(
             dependencies: ["Cadova"],
             swiftSettings: [.interoperabilityMode(.Cxx)]
         ),
+        .executableTarget(
+            name: "WeaselToon2",
+            dependencies: ["Cadova"],
+            swiftSettings: [.interoperabilityMode(.Cxx)]
+        ),
     ]
 )

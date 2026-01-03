@@ -19,6 +19,26 @@
             "target": "WeaselToonCadova",
             "configuration": "release",
             "preLaunchTask": "swift: Build Release WeaselToonCadova"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:WeaselToonCadova}",
+            "name": "Debug WeaselToon2",
+            "target": "WeaselToon2",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug WeaselToon2"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:WeaselToonCadova}",
+            "name": "Release WeaselToon2",
+            "target": "WeaselToon2",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release WeaselToon2"
         }
     ]
 }
