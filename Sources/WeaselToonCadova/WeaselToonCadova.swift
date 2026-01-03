@@ -2,14 +2,16 @@ import Cadova
 
 // MARK: - Dimensions (all in inches)
 struct BoatDimensions {
-    // Main pontoons (27" diameter)
+    // Main pontoons (27" diameter) - outer pontoons
     static let mainPontoonDiameter = 27.0
     static let mainPontoonLength = 144.0
+    static let mainPontoonSpacing = 60.0  // Center to center (outer)
     
-    // Small pontoons (18" diameter)
+    // Small pontoons (18" diameter) - inner pontoons
     static let smallPontoonDiameter = 18.0
     static let smallPontoonStraightLength = 48.0
     static let smallPontoonNoseconeLength = 24.0
+    static let smallPontoonSpacing = 24.0  // Center to center (inner)
     
     // Hat channel
     static let hatChannelWidth = 2.0
@@ -17,9 +19,7 @@ struct BoatDimensions {
     static let hatChannelWall = 0.150
     static let hatChannelFlangeWidth = 1.35
     
-    // Spacing
-    static let mainPontoonSpacing = 60.0
-    static let smallPontoonSpacing = 24.0
+    // Crossmember spacing
     static let crossmemberSpacing = 16.0
 }
 
@@ -39,26 +39,28 @@ struct Pontoon: Shape3D {
     }
     
     var body: any Geometry3D {
+        // Main cylinder body - oriented along X axis (fore-aft)
         Cylinder(diameter: diameter, height: straightLength)
-            .aligned(at: .centerXY, .minZ)
+            .rotated(y: 90°)  // Rotate so cylinder runs along X
+            .aligned(at: .minX, .centerY, .centerZ)
             .adding {
-                // Rear cap (hemisphere)
+                // Rear cap (hemisphere) at X=0
                 Sphere(diameter: diameter)
-                    .intersecting {
-                        Box(x: diameter, y:diameter, z:diameter / 2)
-                            .aligned(at: .centerXY, .maxZ)
-                    }
+                    .scaled(x: 0.5)
+                    .aligned(at: .maxX, .centerY, .centerZ)
                 
-                // Nosecone (if present)
+                // Nosecone at front
                 if hasNosecone {
                     Loft {
-                        layer(z: straightLength) {
+                        layer(z: 0) {
                             Circle(diameter: diameter)
                         }
-                        layer(z: straightLength + noseconeLength) {
-                            Circle(diameter: diameter * 0.15)
+                        layer(z: noseconeLength) {
+                            Circle(diameter: diameter * 0.1)
                         }
                     }
+                    .rotated(y: 90°)
+                    .translated(x: straightLength)
                 }
             }
     }
@@ -70,11 +72,10 @@ struct HatChannel: Shape3D {
     var body: any Geometry3D {
         let d = BoatDimensions.self
         
-        // Create hat channel cross-section as a 2D profile
+        // Hat channel cross-section
         Rectangle(x: d.hatChannelWidth, y: d.hatChannelHeight)
             .aligned(at: .centerX, .minY)
             .subtracting {
-                // Hollow interior
                 Rectangle(
                     x: d.hatChannelWidth - 2 * d.hatChannelWall,
                     y: d.hatChannelHeight - d.hatChannelWall
@@ -93,7 +94,7 @@ struct HatChannel: Shape3D {
             }
             .extruded(height: length)
             .rotated(x: 90°)
-            .aligned(at: .centerXY, .minZ)
+            .aligned(at: .centerX, .centerY, .minZ)
     }
 }
 
@@ -109,7 +110,6 @@ struct CBracket: Shape3D {
     }
     
     var body: any Geometry3D {
-        // U-shape: two vertical sides + top plate
         Box(x: thickness, y: width, z: height)
             .translated(x: width / 2 - thickness / 2)
             .adding {
@@ -128,58 +128,57 @@ struct PontoonBoat: Shape3D {
     var body: any Geometry3D {
         let d = BoatDimensions.self
         
-        // Main 27" pontoons - use symmetry for port/starboard
+        // Main 27" pontoons (OUTER - port and starboard)
         Pontoon(
             diameter: d.mainPontoonDiameter,
             straightLength: d.mainPontoonLength,
             hasNosecone: true,
             noseconeLength: 36
         )
-        .rotated(x: -90°)
         .translated(y: d.mainPontoonSpacing / 2)
-        .symmetry(over: .x)
+        .symmetry(over: .y)  // Mirror across Y to get port & starboard
         .colored(.orange)
         
         .adding {
-            // Middle 18" pontoons (port side, then mirrored)
+            // Middle 18" pontoons (INNER - between main pontoons)
+            // Rear straight section
             Pontoon(
                 diameter: d.smallPontoonDiameter,
-                straightLength: d.smallPontoonStraightLength
+                straightLength: d.smallPontoonStraightLength,
+                hasNosecone: false
             )
-            .rotated(x: -90°)
-            .translated(x: 48, y: d.smallPontoonSpacing / 2)
+            .translated(x: 20, y: d.smallPontoonSpacing / 2)
             .adding {
+                // Front section with nosecone
                 Pontoon(
                     diameter: d.smallPontoonDiameter,
                     straightLength: d.smallPontoonStraightLength,
                     hasNosecone: true,
                     noseconeLength: d.smallPontoonNoseconeLength
                 )
-                .rotated(x: -90°)
-                .translated(x: 48 + d.smallPontoonStraightLength, y: d.smallPontoonSpacing / 2)
+                .translated(x: 20 + d.smallPontoonStraightLength, y: d.smallPontoonSpacing / 2)
             }
-            .symmetry(over: .x)
+            .symmetry(over: .y)  // Mirror for both sides
             .colored(.orange)
         }
         
         .adding {
-            // Front 18" pontoons (your upgrade)
+            // Front 18" pontoons (your upgrade - also INNER)
             Pontoon(
                 diameter: d.smallPontoonDiameter,
                 straightLength: d.smallPontoonStraightLength,
                 hasNosecone: true,
                 noseconeLength: d.smallPontoonNoseconeLength
             )
-            .rotated(x: -90°)
-            .translated(x: d.mainPontoonLength - 24, y: d.smallPontoonSpacing / 2)
-            .symmetry(over: .x)
+            .translated(x: d.mainPontoonLength, y: d.smallPontoonSpacing / 2)
+            .symmetry(over: .y)
             .colored(.orange)
         }
         
         .adding {
             // Hat channel crossmembers for front pontoons
             HatChannel(length: d.smallPontoonSpacing)
-                .translated(x: d.mainPontoonLength - 24, z: d.smallPontoonDiameter / 2 + d.hatChannelHeight)
+                .translated(x: d.mainPontoonLength, z: d.smallPontoonDiameter / 2 + 2)
                 .clonedAt(x: d.crossmemberSpacing)
                 .clonedAt(x: d.crossmemberSpacing)
                 .clonedAt(x: d.crossmemberSpacing)
@@ -187,9 +186,9 @@ struct PontoonBoat: Shape3D {
         }
         
         .adding {
-            // C-brackets
+            // C-brackets at center
             CBracket()
-                .translated(x: d.mainPontoonLength - 24, z: d.smallPontoonDiameter / 2 + d.hatChannelHeight + d.hatChannelHeight)
+                .translated(x: d.mainPontoonLength, z: d.smallPontoonDiameter / 2 + 2 + d.hatChannelHeight)
                 .clonedAt(x: d.crossmemberSpacing)
                 .clonedAt(x: d.crossmemberSpacing)
                 .clonedAt(x: d.crossmemberSpacing)
@@ -197,10 +196,10 @@ struct PontoonBoat: Shape3D {
         }
         
         .adding {
-            // Main crossmembers (simplified)
+            // Main crossmembers spanning between main pontoons
             Box(x: 2, y: d.mainPontoonSpacing, z: 3)
                 .aligned(at: .centerXY, .minZ)
-                .translated(z: d.mainPontoonDiameter / 2 + 2)
+                .translated(x: 10, z: d.mainPontoonDiameter / 2 + 2)
                 .clonedAt(x: 18)
                 .clonedAt(x: 18)
                 .clonedAt(x: 18)
@@ -212,10 +211,10 @@ struct PontoonBoat: Shape3D {
         }
         
         .adding {
-            // Tow plate
+            // Tow plate (runs fore-aft at centerline)
             Box(x: 38, y: 3, z: 0.375)
                 .aligned(at: .minX, .centerY, .minZ)
-                .translated(x: d.mainPontoonLength - 60, z: d.mainPontoonDiameter / 2 + 5)
+                .translated(x: d.mainPontoonLength - 10, z: d.mainPontoonDiameter / 2 + 5)
                 .colored(.darkGray)
         }
     }
