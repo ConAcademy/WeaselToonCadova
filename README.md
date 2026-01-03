@@ -22,7 +22,10 @@ The setup was:
 
 I added the initial source CAD screenshots and prompted:<br>
 
-    I just learned about this Cadova project that can create solid geometry in swift.    I just uploaded a screenshots of the CAD my boat.  Can you estimate its 3d CSG structure and express it in swift with Cadova?
+    I just learned about this Cadova project that can create solid
+    geometry in swift.    I just uploaded a screenshots of the CAD
+    my boat.  Can you estimate its 3d CSG structure and express it
+    in swift with Cadova?
 
 Then entered an agentic loop:
 
