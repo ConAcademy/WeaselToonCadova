@@ -4,26 +4,29 @@ import Cadova
 struct BoatDimensions {
     // Main pontoons (27" diameter) - outer pontoons
     static let mainPontoonDiameter = 27.0
-    static let mainPontoonLength = 144.0
+    static let mainPontoonStraightLength = 35.4  // Corrected
     static let mainPontoonSpacing = 60.0
     
     // Small pontoons (18" diameter) - inner pontoons
     static let smallPontoonDiameter = 18.0
-    static let smallPontoonStraightLength = 48.0
+    static let smallPontoonStraightLength = 24.0  // Corrected
     static let smallPontoonNoseconeLength = 24.0
     static let smallPontoonSpacing = 24.0
     
-    // Hat channel (crossmember)
-    static let hatChannelWidth = 2.0
+    // Hat channel (from the diagram you provided)
+    static let hatChannelTopWidth = 2.0
     static let hatChannelHeight = 2.0
-    static let hatChannelWall = 0.150
-    static let hatChannelFlangeWidth = 1.35
+    static let hatChannelTopThickness = 0.175
+    static let hatChannelWallThickness = 0.150
+    static let hatChannelFlangeWidth = 1.0
+    static let hatChannelFlangeThickness = 0.150
+    static let hatChannelTotalBottomWidth = 1.35
     
-    // Pontoon mounting channel (raised profile on pontoon)
+    // Pontoon mounting channel (raised T-slot profile)
     static let channelWidth = 2.0
     static let channelHeight = 0.75
-    static let channelSlotWidth = 1.0
-    static let channelSlotDepth = 0.4
+    static let channelSlotWidth = 0.8
+    static let channelSlotDepth = 0.5
     static let channelSpacing = 8.0  // For 27" pontoons with 2 channels
     
     // Transom
@@ -36,7 +39,7 @@ struct BoatDimensions {
     static let boltHoleDiameter = 0.375
 }
 
-// MARK: - Pontoon Mounting Channel (raised profile)
+// MARK: - Pontoon Mounting Channel (raised T-slot profile)
 
 struct PontoonChannel: Shape3D {
     let length: Double
@@ -44,213 +47,188 @@ struct PontoonChannel: Shape3D {
     var body: any Geometry3D {
         let d = BoatDimensions.self
         
-        // Channel cross-section: raised rectangle with slot
-        Rectangle(x: d.channelWidth, y: d.channelHeight)
-            .aligned(at: .centerX, .minY)
-            .subtracting {
-                // Slot for square nuts
-                Rectangle(x: d.channelSlotWidth, y: d.channelSlotDepth)
-                    .aligned(at: .centerX, .maxY)
-                    .translated(y: d.channelHeight)
-            }
-            .extruded(height: length)
-            .rotated(x: 90°)
+        // T-slot channel profile
+        // Base rectangle
+        Box(x: length, y: d.channelWidth, z: d.channelHeight)
             .aligned(at: .centerX, .centerY, .minZ)
+            .subtracting {
+                // T-slot groove (wider at bottom, narrow at top)
+                Box(x: length + 2, y: d.channelSlotWidth, z: d.channelSlotDepth)
+                    .aligned(at: .centerX, .centerY, .maxZ)
+                    .translated(z: d.channelHeight)
+            }
     }
 }
 
-// MARK: - Pontoon Components
+// MARK: - Transom (flat end cap)
 
-struct PontoonStraight: Shape3D {
+struct Transom: Shape3D {
     let diameter: Double
-    let length: Double
-    let channelCount: Int  // 1 for 18", 2 for 27"
     
     var body: any Geometry3D {
         let d = BoatDimensions.self
         
-        // Main cylinder body
+        Cylinder(diameter: diameter, height: d.transomThickness)
+            .rotated(y: 90°)
+            .aligned(at: .centerX, .centerY, .centerZ)
+    }
+}
+
+// MARK: - Pontoon Straight Section
+
+struct PontoonStraight: Shape3D {
+    let diameter: Double
+    let length: Double
+    let channelCount: Int
+    
+    var body: any Geometry3D {
+        let d = BoatDimensions.self
+        
+        // Main cylinder
         Cylinder(diameter: diameter, height: length)
             .rotated(y: 90°)
             .aligned(at: .minX, .centerY, .centerZ)
             .adding {
-                // Transom at rear (X=0)
-                Cylinder(diameter: diameter, height: d.transomThickness)
-                    .rotated(y: 90°)
-                    .aligned(at: .maxX, .centerY, .centerZ)
-                
-                // Transom at front (will be overlapped by nosecone or next section)
-                Cylinder(diameter: diameter, height: d.transomThickness)
-                    .rotated(y: 90°)
-                    .aligned(at: .minX, .centerY, .centerZ)
-                    .translated(x: length)
-                
+                // Rear transom at X=0
+                Transom(diameter: diameter)
+                    .translated(x: -d.transomThickness / 2)
+            }
+            .adding {
+                // Front transom
+                Transom(diameter: diameter)
+                    .translated(x: length + d.transomThickness / 2)
+            }
+            .adding {
                 // Mounting channels on top
                 if channelCount == 1 {
-                    // Single center channel for 18" pontoons
-                    PontoonChannel(length: length)
+                    PontoonChannel(length: length - 2)
                         .translated(x: length / 2, z: diameter / 2)
-                } else if channelCount == 2 {
-                    // Two channels for 27" pontoons
-                    PontoonChannel(length: length)
+                }
+            }
+            .adding {
+                if channelCount == 2 {
+                    PontoonChannel(length: length - 2)
                         .translated(x: length / 2, y: d.channelSpacing / 2, z: diameter / 2)
-                    PontoonChannel(length: length)
+                }
+            }
+            .adding {
+                if channelCount == 2 {
+                    PontoonChannel(length: length - 2)
                         .translated(x: length / 2, y: -d.channelSpacing / 2, z: diameter / 2)
                 }
             }
     }
 }
 
+// MARK: - Pontoon Nosecone
+
 struct PontoonNosecone: Shape3D {
     let diameter: Double
     let length: Double
-    let channelCount: Int  // 1 for 18", 2 for 27"
+    let channelCount: Int
     
     var body: any Geometry3D {
         let d = BoatDimensions.self
         
-        // Nosecone: elliptical/rounded shape
-        // Use a sphere scaled to create an oblate ellipsoid
+        // Elliptical nosecone (stretched hemisphere)
         Sphere(diameter: diameter)
-            .scaled(x: length / (diameter / 2))  // Stretch along X
+            .scaled(x: (length * 2) / diameter)
             .intersecting {
-                // Keep only the front half
-                Box(x:length, y:diameter, z:diameter)
+                Box(x:length + 1, y:diameter + 1, z:diameter + 1)
                     .aligned(at: .minX, .centerY, .centerZ)
             }
+            .aligned(at: .minX, .centerY, .centerZ)
             .adding {
-                // Transom at rear of nosecone section
-                Cylinder(diameter: diameter, height: d.transomThickness)
-                    .rotated(y: 90°)
-                    .aligned(at: .maxX, .centerY, .centerZ)
-                
-                // Short straight section before the curve for channel mounting
-                Cylinder(diameter: diameter, height: length * 0.3)
-                    .rotated(y: 90°)
-                    .aligned(at: .minX, .centerY, .centerZ)
-                
-                // Mounting channels on top (shorter, on the straight part)
+                // Rear transom
+                Transom(diameter: diameter)
+                    .translated(x: -d.transomThickness / 2)
+            }
+            .adding {
+                // Channel on the curved surface (shorter)
                 if channelCount == 1 {
-                    PontoonChannel(length: length * 0.6)
-                        .translated(x: length * 0.3, z: diameter / 2)
-                } else if channelCount == 2 {
-                    PontoonChannel(length: length * 0.6)
-                        .translated(x: length * 0.3, y: d.channelSpacing / 2, z: diameter / 2)
-                    PontoonChannel(length: length * 0.6)
-                        .translated(x: length * 0.3, y: -d.channelSpacing / 2, z: diameter / 2)
+                    PontoonChannel(length: length * 0.4)
+                        .translated(x: length * 0.2, z: diameter / 2)
                 }
             }
-    }
-}
-
-// MARK: - Combined Pontoon (straight + nosecone)
-
-struct Pontoon: Shape3D {
-    let diameter: Double
-    let straightLength: Double
-    let hasNosecone: Bool
-    let noseconeLength: Double
-    let channelCount: Int
-    
-    init(diameter: Double, straightLength: Double, hasNosecone: Bool = false, noseconeLength: Double = 0, channelCount: Int = 1) {
-        self.diameter = diameter
-        self.straightLength = straightLength
-        self.hasNosecone = hasNosecone
-        self.noseconeLength = noseconeLength
-        self.channelCount = channelCount
-    }
-    
-    var body: any Geometry3D {
-        PontoonStraight(diameter: diameter, length: straightLength, channelCount: channelCount)
             .adding {
-                if hasNosecone {
-                    PontoonNosecone(diameter: diameter, length: noseconeLength, channelCount: channelCount)
-                        .translated(x: straightLength)
+                if channelCount == 2 {
+                    PontoonChannel(length: length * 0.4)
+                        .translated(x: length * 0.2, y: d.channelSpacing / 2, z: diameter / 2)
+                }
+            }
+            .adding {
+                if channelCount == 2 {
+                    PontoonChannel(length: length * 0.4)
+                        .translated(x: length * 0.2, y: -d.channelSpacing / 2, z: diameter / 2)
                 }
             }
     }
 }
 
-// MARK: - Hat Channel Crossmember
+// MARK: - Hat Channel (accurate to diagram)
 
 struct HatChannel: Shape3D {
     let length: Double
-    let withHoles: Bool
-    
-    init(length: Double, withHoles: Bool = true) {
-        self.length = length
-        self.withHoles = withHoles
-    }
     
     var body: any Geometry3D {
         let d = BoatDimensions.self
         
-        Rectangle(x: d.hatChannelWidth, y: d.hatChannelHeight)
-            .aligned(at: .centerX, .minY)
-            .subtracting {
-                Rectangle(
-                    x: d.hatChannelWidth - 2 * d.hatChannelWall,
-                    y: d.hatChannelHeight - d.hatChannelWall
-                )
-                .aligned(at: .centerX, .minY)
-                .translated(y: d.hatChannelWall)
+        // Build the hat channel cross-section from the diagram
+        // Top plate
+        Rectangle(x: d.hatChannelTopWidth, y: d.hatChannelTopThickness)
+            .aligned(at: .centerX, .maxY)
+            .translated(y: d.hatChannelHeight)
+            .adding {
+                // Left wall
+                Rectangle(x: d.hatChannelWallThickness, y: d.hatChannelHeight - d.hatChannelTopThickness)
+                    .aligned(at: .minX, .minY)
+                    .translated(x: -d.hatChannelTopWidth / 2, y: d.hatChannelFlangeThickness)
             }
             .adding {
-                Rectangle(x: d.hatChannelFlangeWidth, y: d.hatChannelWall)
+                // Right wall
+                Rectangle(x: d.hatChannelWallThickness, y: d.hatChannelHeight - d.hatChannelTopThickness)
                     .aligned(at: .maxX, .minY)
-                    .translated(x: -d.hatChannelWidth / 2)
-                Rectangle(x: d.hatChannelFlangeWidth, y: d.hatChannelWall)
+                    .translated(x: d.hatChannelTopWidth / 2, y: d.hatChannelFlangeThickness)
+            }
+            .adding {
+                // Left flange
+                Rectangle(x: d.hatChannelTotalBottomWidth, y: d.hatChannelFlangeThickness)
                     .aligned(at: .minX, .minY)
-                    .translated(x: d.hatChannelWidth / 2)
+                    .translated(x: -d.hatChannelTopWidth / 2)
+            }
+            .adding {
+                // Right flange
+                Rectangle(x: d.hatChannelTotalBottomWidth, y: d.hatChannelFlangeThickness)
+                    .aligned(at: .maxX, .minY)
+                    .translated(x: d.hatChannelTopWidth / 2)
             }
             .extruded(height: length)
             .rotated(x: 90°)
             .aligned(at: .centerX, .centerY, .minZ)
-            .subtracting {
-                if withHoles {
-                    // Flange holes at ends
-                    Cylinder(diameter: d.boltHoleDiameter, height: d.hatChannelHeight + 1)
-                        .translated(x: -d.hatChannelWidth / 2 - 0.4, y: length / 2 - 1.5)
-                        .clonedAt(y: -length + 3)
-                    Cylinder(diameter: d.boltHoleDiameter, height: d.hatChannelHeight + 1)
-                        .translated(x: d.hatChannelWidth / 2 + 0.4, y: length / 2 - 1.5)
-                        .clonedAt(y: -length + 3)
-                }
-            }
     }
 }
 
 // MARK: - C-Bracket
 
 struct CBracket: Shape3D {
-    let height: Double
-    let width: Double
-    let thickness: Double
-    
-    init(height: Double = 4.0, width: Double = 2.0, thickness: Double = 0.25) {
-        self.height = height
-        self.width = width
-        self.thickness = thickness
-    }
-    
     var body: any Geometry3D {
-        let d = BoatDimensions.self
+        let height = 4.0
+        let width = 2.0
+        let thickness = 0.25
         
+        // Two vertical sides
         Box(x: thickness, y: width, z: height)
             .translated(x: width / 2 - thickness / 2)
             .adding {
                 Box(x: thickness, y: width, z: height)
                     .translated(x: -width / 2 + thickness / 2)
+            }
+            .adding {
+                // Top plate
                 Box(x: width, y: width, z: thickness)
                     .translated(z: height - thickness)
             }
             .aligned(at: .centerXY, .minZ)
-            .subtracting {
-                Cylinder(diameter: d.boltHoleDiameter, height: thickness + 0.5)
-                    .translated(x: -0.4, y: 0.4, z: height - thickness - 0.25)
-                    .clonedAt(x: 0.8)
-                    .clonedAt(y: -0.8)
-            }
     }
 }
 
@@ -260,20 +238,8 @@ struct MainCrossmember: Shape3D {
     let length: Double
     
     var body: any Geometry3D {
-        let d = BoatDimensions.self
-        
         Box(x: 2, y: length, z: 3)
             .aligned(at: .centerXY, .minZ)
-            .subtracting {
-                Cylinder(diameter: d.boltHoleDiameter, height: 4)
-                    .translated(y: length / 2 - 2, z: -0.5)
-                    .clonedAt(y: -4)
-                    .clonedAt(y: -length + 8)
-                Cylinder(diameter: d.boltHoleDiameter, height: 4)
-                    .translated(y: d.smallPontoonSpacing / 2 + 2, z: -0.5)
-                    .clonedAt(y: -4)
-                    .symmetry(over: .y)
-            }
     }
 }
 
@@ -283,61 +249,67 @@ struct PontoonBoat: Shape3D {
     var body: any Geometry3D {
         let d = BoatDimensions.self
         
+        // Calculate total main pontoon length (multiple straights + nosecone)
+        let mainPontoonTotalStraight = d.mainPontoonStraightLength * 4  // 4 straight sections
+        let mainNoseconeLength = 36.0
+        
         // Main 27" pontoons (OUTER) - 2 channels each
-        Pontoon(
-            diameter: d.mainPontoonDiameter,
-            straightLength: d.mainPontoonLength,
-            hasNosecone: true,
-            noseconeLength: 36,
-            channelCount: 2
-        )
-        .translated(y: d.mainPontoonSpacing / 2)
-        .symmetry(over: .y)
-        .colored(.orange)
+        // Multiple straight sections joined together
+        PontoonStraight(diameter: d.mainPontoonDiameter, length: d.mainPontoonStraightLength, channelCount: 2)
+            .adding {
+                PontoonStraight(diameter: d.mainPontoonDiameter, length: d.mainPontoonStraightLength, channelCount: 2)
+                    .translated(x: d.mainPontoonStraightLength)
+            }
+            .adding {
+                PontoonStraight(diameter: d.mainPontoonDiameter, length: d.mainPontoonStraightLength, channelCount: 2)
+                    .translated(x: d.mainPontoonStraightLength * 2)
+            }
+            .adding {
+                PontoonStraight(diameter: d.mainPontoonDiameter, length: d.mainPontoonStraightLength, channelCount: 2)
+                    .translated(x: d.mainPontoonStraightLength * 3)
+            }
+            .adding {
+                PontoonNosecone(diameter: d.mainPontoonDiameter, length: mainNoseconeLength, channelCount: 2)
+                    .translated(x: mainPontoonTotalStraight)
+            }
+            .translated(y: d.mainPontoonSpacing / 2)
+            .symmetry(over: .y)
+            .colored(.orange)
         
         .adding {
             // Middle 18" pontoons (INNER) - 1 channel each
             // Rear straight section
-            Pontoon(
-                diameter: d.smallPontoonDiameter,
-                straightLength: d.smallPontoonStraightLength,
-                hasNosecone: false,
-                channelCount: 1
-            )
-            .translated(x: 20, y: d.smallPontoonSpacing / 2)
-            .adding {
-                // Front section with nosecone
-                Pontoon(
-                    diameter: d.smallPontoonDiameter,
-                    straightLength: d.smallPontoonStraightLength,
-                    hasNosecone: true,
-                    noseconeLength: d.smallPontoonNoseconeLength,
-                    channelCount: 1
-                )
-                .translated(x: 20 + d.smallPontoonStraightLength, y: d.smallPontoonSpacing / 2)
-            }
-            .symmetry(over: .y)
-            .colored(.orange)
+            PontoonStraight(diameter: d.smallPontoonDiameter, length: d.smallPontoonStraightLength, channelCount: 1)
+                .translated(x: 20, y: d.smallPontoonSpacing / 2)
+                .adding {
+                    // Front section with nosecone
+                    PontoonStraight(diameter: d.smallPontoonDiameter, length: d.smallPontoonStraightLength, channelCount: 1)
+                        .translated(x: 20 + d.smallPontoonStraightLength, y: d.smallPontoonSpacing / 2)
+                }
+                .adding {
+                    PontoonNosecone(diameter: d.smallPontoonDiameter, length: d.smallPontoonNoseconeLength, channelCount: 1)
+                        .translated(x: 20 + d.smallPontoonStraightLength * 2, y: d.smallPontoonSpacing / 2)
+                }
+                .symmetry(over: .y)
+                .colored(.orange)
         }
         
         .adding {
             // Front 18" pontoons (your upgrade) - 1 channel each
-            Pontoon(
-                diameter: d.smallPontoonDiameter,
-                straightLength: d.smallPontoonStraightLength,
-                hasNosecone: true,
-                noseconeLength: d.smallPontoonNoseconeLength,
-                channelCount: 1
-            )
-            .translated(x: d.mainPontoonLength, y: d.smallPontoonSpacing / 2)
-            .symmetry(over: .y)
-            .colored(.orange)
+            PontoonStraight(diameter: d.smallPontoonDiameter, length: d.smallPontoonStraightLength, channelCount: 1)
+                .translated(x: mainPontoonTotalStraight, y: d.smallPontoonSpacing / 2)
+                .adding {
+                    PontoonNosecone(diameter: d.smallPontoonDiameter, length: d.smallPontoonNoseconeLength, channelCount: 1)
+                        .translated(x: mainPontoonTotalStraight + d.smallPontoonStraightLength, y: d.smallPontoonSpacing / 2)
+                }
+                .symmetry(over: .y)
+                .colored(.orange)
         }
         
         .adding {
             // Hat channel crossmembers for front pontoons
-            HatChannel(length: d.smallPontoonSpacing, withHoles: true)
-                .translated(x: d.mainPontoonLength + 4, z: d.smallPontoonDiameter / 2 + d.channelHeight + 1)
+            HatChannel(length: d.smallPontoonSpacing)
+                .translated(x: mainPontoonTotalStraight + 4, z: d.smallPontoonDiameter / 2 + d.channelHeight)
                 .clonedAt(x: d.crossmemberSpacing)
                 .clonedAt(x: d.crossmemberSpacing)
                 .clonedAt(x: d.crossmemberSpacing)
@@ -347,7 +319,7 @@ struct PontoonBoat: Shape3D {
         .adding {
             // C-brackets at center
             CBracket()
-                .translated(x: d.mainPontoonLength + 4, z: d.smallPontoonDiameter / 2 + d.channelHeight + 1 + d.hatChannelHeight)
+                .translated(x: mainPontoonTotalStraight + 4, z: d.smallPontoonDiameter / 2 + d.channelHeight + d.hatChannelHeight)
                 .clonedAt(x: d.crossmemberSpacing)
                 .clonedAt(x: d.crossmemberSpacing)
                 .clonedAt(x: d.crossmemberSpacing)
@@ -357,7 +329,7 @@ struct PontoonBoat: Shape3D {
         .adding {
             // Main crossmembers
             MainCrossmember(length: d.mainPontoonSpacing)
-                .translated(x: 10, z: d.mainPontoonDiameter / 2 + d.channelHeight + 1)
+                .translated(x: 10, z: d.mainPontoonDiameter / 2 + d.channelHeight)
                 .clonedAt(x: 18)
                 .clonedAt(x: 18)
                 .clonedAt(x: 18)
@@ -372,7 +344,7 @@ struct PontoonBoat: Shape3D {
             // Tow plate
             Box(x: 38, y: 3, z: 0.375)
                 .aligned(at: .minX, .centerY, .minZ)
-                .translated(x: d.mainPontoonLength - 10, z: d.mainPontoonDiameter / 2 + d.channelHeight + 4)
+                .translated(x: mainPontoonTotalStraight - 10, z: d.mainPontoonDiameter / 2 + d.channelHeight + 4)
                 .colored(.darkGray)
         }
     }
