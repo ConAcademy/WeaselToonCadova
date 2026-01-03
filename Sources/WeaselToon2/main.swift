@@ -182,7 +182,7 @@ func pontoonAssembly(
     return result
 }
 
-/// Main 27" pontoon (single-nose configuration for 15' boat)
+/// Main 27" pontoon (double-nose configuration for 15' boat)
 func main27Pontoon() -> any Geometry3D {
     pontoonAssembly(
         diameter: Dims.Main.diameter,
@@ -190,7 +190,7 @@ func main27Pontoon() -> any Geometry3D {
         straightLength: Dims.Main.straightLength,
         straightCount: Dims.Main.straightsPerPontoon,
         hasFrontNose: true,
-        hasRearNose: false
+        hasRearNose: true
     )
 }
 
@@ -217,7 +217,7 @@ func mainBeamProfile() -> any Geometry2D {
     let t = Dims.MainBeam.flangeThickness
     
     // T-beam: vertical stem with horizontal top flange
-    Rectangle(x: t * 2, y: h)
+    return Rectangle(x: t * 2, y: h)
         .aligned(at: .centerX, .bottom)
         .adding {
             // Top flange
@@ -227,28 +227,32 @@ func mainBeamProfile() -> any Geometry2D {
         }
 }
 
-/// Simplified hat channel profile (cross-section)
+/// Hat channel profile (cross-section) - trapezoidal with flanges
 func hatChannelProfile() -> any Geometry2D {
     let h = Dims.HatChannel.height
     let topW = Dims.HatChannel.topWidth
+    let botW = Dims.HatChannel.bottomWidth
     let flangeW = Dims.HatChannel.flangeWidth
     let t = Dims.HatChannel.thickness
-    
-    // Simplified: rectangular channel with flanges
-    Rectangle(x: topW, y: h)
-        .aligned(at: .centerX, .bottom)
-        .adding {
-            // Left flange
-            Rectangle(x: flangeW, y: t)
-                .aligned(at: .maxX, .bottom)
-                .translated(x: -topW/2)
-        }
-        .adding {
-            // Right flange
-            Rectangle(x: flangeW, y: t)
-                .aligned(at: .minX, .bottom)
-                .translated(x: topW/2)
-        }
+
+    // Outer trapezoidal shape (wider at bottom)
+    let outer = Polygon([
+        [-topW/2, h],           // top left
+        [topW/2, h],            // top right
+        [botW/2, 0],            // bottom right (wider)
+        [botW/2 + flangeW, 0],  // right flange outer
+        [botW/2 + flangeW, t],  // right flange top
+        [botW/2, t],            // right flange inner
+        [(topW/2 - t), h - t],  // inner top right
+        [-(topW/2 - t), h - t], // inner top left
+        [-(botW/2 - t), t],     // inner bottom left
+        [-botW/2, t],           // left flange inner
+        [-botW/2 - flangeW, t], // left flange top
+        [-botW/2 - flangeW, 0], // left flange outer
+        [-botW/2, 0],           // bottom left (wider)
+    ])
+
+    return outer
 }
 
 /// Hat channel crossmember (full 3D)
@@ -266,7 +270,7 @@ func squareTube(length: Double) -> any Geometry3D {
     let size = Dims.SquareTube.size
     let wall = Dims.SquareTube.wall
     
-    Rectangle(x: size, y: size)
+    return Rectangle(x: size, y: size)
         .aligned(at: .center)
         .subtracting {
             Rectangle(x: size - 2*wall, y: size - 2*wall)
@@ -349,7 +353,7 @@ func transomBracket() -> any Geometry3D {
     let d = Dims.Transom.depth
     
     // Simple L-bracket shape for motor mount
-    Box(x: w, y: d, z: h)
+    return Box(x: w, y: d, z: h)
         .aligned(at: .centerX, .minY, .minZ)
         .withMaterial(.steel)
 }
