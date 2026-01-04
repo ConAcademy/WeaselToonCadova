@@ -34,7 +34,7 @@ First I set things up:
  
  1. Start with this prompt:<br>
 
-    `I just learned about this Cadova project that can create solid
+> `I just learned about this Cadova project that can create solid
     geometry in swift.    I just uploaded a screenshots of the CAD
     my boat.  Can you estimate its 3d CSG structure and express it
     in swift with Cadova?`
@@ -86,16 +86,17 @@ With that, I could enter this agentic loop in Claude Code, which will evolve to 
 
 Here's the prompt that kicks off one spin of the wheel:
 
-    i have installed the f3d program which can render 3mf from the command line.  look at how to use it and iterate through the models and resultant images, identifying issues in the image.  you can use the pasted fusion3d images and tinypontoonboats.com images as reference.
+> `i have installed the f3d program which can render 3mf from the command line.  look at how to use it and iterate through the models and resultant images, identifying issues in the image.  you can use the pasted fusion3d images and tinypontoonboats.com images as reference.`
 
 Here's an example of a command it issued to generate a picture for itself:
-```
-f3d --output renders/boat-iso-v4.png --resolution 1200,900 --camera-position 200,200,150 --camera-focal-point 0,90,10 --up +Z pontoon-boat-complete.3mf 2>&1
-```
+
+> `
+f3d --output renders/boat-iso-v4.png --resolution 1200,900 --camera-position 200,200,150 --camera-focal-point 0,90,10 --up +Z pontoon-boat-complete.3mf 2>&1`
 
 Then this is the prompt that made it loop:
 
-    i want you to iterate 5 times in the loop you just did , examining the resultant renders and modifying the code
+> `
+i want you to iterate 5 times in the loop you just did , examining the resultant renders and modifying the code`
 
 It then did 5 loop iterations and summarized what it did:
 
@@ -139,7 +140,7 @@ Summary of all changes made:
   - ✓ Transom with vertical supports
   - ✓ Front square tube crossmember
   - ✓ Pontoon reinforcement ribs
-  ```
+```
 
 Here's a final picture, definitely not perfect.  Maybe if I turn it to 11.
 
