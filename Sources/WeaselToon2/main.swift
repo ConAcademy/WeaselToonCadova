@@ -32,11 +32,10 @@ struct Dims {
     
     // Frame - Main beams (T-extrusion that sits in pontoon channels)
     struct MainBeam {
-        static let flangeWidth: Double = 2.5    // Top flange width
+        static let flangeWidth: Double = 3.5    // Top flange width (more visible)
         static let stemWidth: Double = 1.25     // Stem fits in 1.5" channel
-        static let height: Double = 2.0         // Total height
-        static let flangeThickness: Double = 0.25
-        static let stemHeight: Double = 1.0     // How deep stem goes into channel
+        static let flangeThickness: Double = 0.5   // Thicker flange for visibility
+        static let stemHeight: Double = 0.75    // Stem goes into channel
     }
     
     // Frame - Hat channel crossmembers
@@ -51,8 +50,8 @@ struct Dims {
     
     // Frame - Square tube (front crossmember)
     struct SquareTube {
-        static let size: Double = 2.0
-        static let wall: Double = 0.125
+        static let size: Double = 2.5  // Larger for visibility
+        static let wall: Double = 0.1875  // 3/16" wall
     }
     
     // Spacing
@@ -104,7 +103,7 @@ func noseCone(diameter: Double, length: Double) -> any Geometry3D {
             Circle(diameter: 0.5)  // Slightly rounded tip
         }
     }
-    .colored(.orange)
+    .colored(.init(red: 1.0, green: 0.45, blue: 0.1))  // Match pontoon orange
 }
 
 /// Creates a T-slot channel profile for pontoon top
@@ -139,10 +138,10 @@ func straightSection(
     let ribSpacing: Double = 6.0
     let ribCount = Int(length / ribSpacing)
 
-    // Start with main cylinder
+    // Start with main cylinder - bright orange like the real pontoons
     var result: any Geometry3D = Cylinder(diameter: diameter, height: length)
         .rotated(x: -90°)
-        .colored(.orange)
+        .colored(.init(red: 1.0, green: 0.45, blue: 0.1))
 
     // T-slot channel extruded along length
     let channelExtrusion = tSlotProfile()
@@ -166,14 +165,14 @@ func straightSection(
         result = result.subtracting { rightChannel }
     }
 
-    // Add reinforcement ribs (subtle visual detail)
+    // Add reinforcement ribs (more prominent)
     for i in 1..<ribCount {
         let ribPos = Double(i) * ribSpacing
-        let rib = Ring(outerDiameter: diameter + 0.3, innerDiameter: diameter - 0.1)
-            .extruded(height: 0.5)
+        let rib = Ring(outerDiameter: diameter + 0.5, innerDiameter: diameter - 0.2)
+            .extruded(height: 0.75)
             .rotated(x: -90°)
             .translated(y: ribPos)
-            .colored(.orange)
+            .colored(.init(red: 0.9, green: 0.5, blue: 0.2))  // Darker orange for contrast
         result = result.adding { rib }
     }
 
@@ -354,22 +353,21 @@ func squareTube(length: Double) -> any Geometry3D {
         .withMaterial(.steel)
 }
 
-/// Main beam extrusion
+/// Main beam extrusion (aluminum T-extrusion)
 func mainBeam(length: Double) -> any Geometry3D {
     mainBeamProfile()
         .extruded(height: length)
         .rotated(x: -90°)
-        .withMaterial(.steel)
+        .colored(.init(red: 0.75, green: 0.75, blue: 0.78))  // Aluminum silver
 }
 
 /// C-bracket that wraps around pontoon and connects to frame
 /// These secure the pontoons to the crossmembers
 func cBracket(pontoonDiameter: Double) -> any Geometry3D {
-    let thickness: Double = 0.125  // 1/8" steel
-    let width: Double = 2.0        // Width of the bracket
-    let wrapAngle: Double = 180.0  // Wraps halfway around pontoon
-    let tabHeight: Double = 2.0    // Height of mounting tabs
-    let tabWidth: Double = 1.5     // Width of mounting tabs
+    let thickness: Double = 0.25   // 1/4" steel (thicker for visibility)
+    let width: Double = 3.0        // Width of the bracket (wider)
+    let tabHeight: Double = 3.0    // Height of mounting tabs
+    let tabWidth: Double = 2.0     // Width of mounting tabs
 
     let innerRadius = pontoonDiameter / 2
     let outerRadius = innerRadius + thickness
@@ -387,7 +385,7 @@ func cBracket(pontoonDiameter: Double) -> any Geometry3D {
         .extruded(height: width)
         .translated(z: -width/2)
 
-    // Mounting tabs on each side
+    // Mounting tabs on each side that go UP to the frame
     let leftTab = Box(x: thickness, y: tabHeight, z: tabWidth)
         .translated(x: -innerRadius - thickness/2, y: tabHeight/2, z: 0)
 
@@ -471,6 +469,23 @@ func frameAssembly() -> any Geometry3D {
         }
     }
 
+    // Add center longitudinal rails (connecting the center area)
+    let centerRailLength = length * 0.6  // Rails span ~60% of boat length
+    let centerRailStart = length * 0.2   // Start 20% from rear
+    let centerRailSpacing: Double = 24.0  // Spacing between center rails (matches aux pontoon spacing)
+
+    // Left center rail (runs lengthwise through center)
+    result = result.adding {
+        mainBeam(length: centerRailLength)
+            .translated(x: -centerRailSpacing/2, y: centerRailStart, z: crossmemberZ - beamTotalH)
+    }
+
+    // Right center rail
+    result = result.adding {
+        mainBeam(length: centerRailLength)
+            .translated(x: centerRailSpacing/2, y: centerRailStart, z: crossmemberZ - beamTotalH)
+    }
+
     return result
 }
 
@@ -479,10 +494,30 @@ func transomBracket() -> any Geometry3D {
     let w = Dims.Transom.width
     let h = Dims.Transom.height
     let d = Dims.Transom.depth
-    
-    // Simple L-bracket shape for motor mount
-    return Box(x: w, y: d, z: h)
+    let postWidth: Double = 2.0
+    let postDepth: Double = 2.0
+
+    // Main transom plate (vertical)
+    let plate = Box(x: w, y: d, z: h)
         .aligned(at: .centerX, .minY, .minZ)
+
+    // Left vertical support post
+    let leftPost = Box(x: postWidth, y: postDepth, z: h + 4)
+        .translated(x: -w/2 + postWidth/2, y: -postDepth, z: -4)
+
+    // Right vertical support post
+    let rightPost = Box(x: postWidth, y: postDepth, z: h + 4)
+        .translated(x: w/2 - postWidth/2, y: -postDepth, z: -4)
+
+    // Horizontal crossbar at top connecting posts
+    let topBar = Box(x: w, y: postDepth, z: postWidth)
+        .aligned(at: .centerX, .maxY, .minZ)
+        .translated(y: -postDepth, z: h)
+
+    return plate
+        .adding { leftPost }
+        .adding { rightPost }
+        .adding { topBar }
         .withMaterial(.steel)
 }
 
