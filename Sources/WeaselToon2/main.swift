@@ -107,16 +107,34 @@ func noseCone(diameter: Double, length: Double) -> any Geometry3D {
     .colored(.orange)
 }
 
-/// Creates a pontoon straight section cylinder with top channels
+/// Creates a T-slot channel profile for pontoon top
+/// T-slot: narrow opening at top, wider cavity below for square nuts
+func tSlotProfile() -> any Geometry2D {
+    let topWidth: Double = 1.5      // Opening width at top
+    let bottomWidth: Double = 2.5   // Wider cavity for square nuts
+    let totalDepth: Double = 1.0    // Total channel depth
+    let slotDepth: Double = 0.4     // Depth of narrow slot at top
+
+    // T-slot shape: narrow slot on top, wider cavity below
+    return Polygon([
+        [-topWidth/2, 0],                    // top left of slot
+        [-topWidth/2, -slotDepth],           // bottom of narrow slot, left
+        [-bottomWidth/2, -slotDepth],        // step out to wider cavity
+        [-bottomWidth/2, -totalDepth],       // bottom left
+        [bottomWidth/2, -totalDepth],        // bottom right
+        [bottomWidth/2, -slotDepth],         // step in from wider cavity
+        [topWidth/2, -slotDepth],            // bottom of narrow slot, right
+        [topWidth/2, 0],                     // top right of slot
+    ])
+}
+
+/// Creates a pontoon straight section cylinder with top T-slot channels
 func straightSection(
     diameter: Double,
     length: Double,
     channelCount: Int = 1,
     channelSpacing: Double = 0.0
 ) -> any Geometry3D {
-    let channelWidth: Double = 1.5
-    let channelDepth: Double = 0.75
-
     // Main cylinder body with reinforcement ribs
     let ribSpacing: Double = 6.0
     let ribCount = Int(length / ribSpacing)
@@ -126,21 +144,24 @@ func straightSection(
         .rotated(x: -90°)
         .colored(.orange)
 
-    // Cut channels into top of pontoon
+    // T-slot channel extruded along length
+    let channelExtrusion = tSlotProfile()
+        .extruded(height: length + 2)
+        .rotated(x: -90°)
+        .translated(y: -1)
+
+    // Cut T-slot channels into top of pontoon
     if channelCount == 1 {
         // Single center channel
-        let channel = Box(x: channelWidth, y: length + 2, z: channelDepth)
-            .translated(z: diameter/2 - channelDepth/2)
-            .translated(y: length/2 - 1)
+        let channel = channelExtrusion
+            .translated(z: diameter/2)
         result = result.subtracting { channel }
     } else if channelCount == 2 {
         // Dual channels for 27" pontoons
-        let leftChannel = Box(x: channelWidth, y: length + 2, z: channelDepth)
-            .translated(x: -channelSpacing/2, z: diameter/2 - channelDepth/2)
-            .translated(y: length/2 - 1)
-        let rightChannel = Box(x: channelWidth, y: length + 2, z: channelDepth)
-            .translated(x: channelSpacing/2, z: diameter/2 - channelDepth/2)
-            .translated(y: length/2 - 1)
+        let leftChannel = channelExtrusion
+            .translated(x: -channelSpacing/2, z: diameter/2)
+        let rightChannel = channelExtrusion
+            .translated(x: channelSpacing/2, z: diameter/2)
         result = result.subtracting { leftChannel }
         result = result.subtracting { rightChannel }
     }
@@ -270,40 +291,48 @@ func mainBeamProfile() -> any Geometry2D {
         }
 }
 
-/// Hat channel profile (cross-section) - trapezoidal with flanges
+/// Hat channel profile (cross-section)
+/// Wide flat top (deck surface), tapered sides, narrow bottom with flanges
 func hatChannelProfile() -> any Geometry2D {
     let h = Dims.HatChannel.height
-    let topW = Dims.HatChannel.topWidth
-    let botW = Dims.HatChannel.bottomWidth
+    let topW = Dims.HatChannel.bottomWidth  // Wide at top (deck surface)
+    let botW = Dims.HatChannel.topWidth     // Narrow at bottom
     let flangeW = Dims.HatChannel.flangeWidth
     let t = Dims.HatChannel.thickness
 
-    // Outer trapezoidal shape (wider at bottom)
+    // Hat channel: wide top, tapered sides, narrow bottom with outward flanges
+    // Profile drawn with y=0 at bottom, y=h at top
     let outer = Polygon([
-        [-topW/2, h],           // top left
-        [topW/2, h],            // top right
-        [botW/2, 0],            // bottom right (wider)
-        [botW/2 + flangeW, 0],  // right flange outer
-        [botW/2 + flangeW, t],  // right flange top
-        [botW/2, t],            // right flange inner
-        [(topW/2 - t), h - t],  // inner top right
-        [-(topW/2 - t), h - t], // inner top left
-        [-(botW/2 - t), t],     // inner bottom left
-        [-botW/2, t],           // left flange inner
-        [-botW/2 - flangeW, t], // left flange top
-        [-botW/2 - flangeW, 0], // left flange outer
-        [-botW/2, 0],           // bottom left (wider)
+        // Top (wide, flat deck surface)
+        [-topW/2, h],
+        [topW/2, h],
+        // Right side tapers down and inward
+        [botW/2, 0],
+        // Right flange extends outward at bottom
+        [botW/2 + flangeW, 0],
+        [botW/2 + flangeW, -t],
+        [botW/2, -t],
+        // Inner cavity - go back up
+        [botW/2 - t, t],
+        [topW/2 - t, h - t],
+        [-topW/2 + t, h - t],
+        [-botW/2 + t, t],
+        // Left side
+        [-botW/2, -t],
+        [-botW/2 - flangeW, -t],
+        [-botW/2 - flangeW, 0],
+        [-botW/2, 0],
     ])
 
     return outer
 }
 
 /// Hat channel crossmember (full 3D)
+/// Profile already has wide top, flanges at bottom - just orient along X axis
 func hatChannel(length: Double = Dims.HatChannel.length) -> any Geometry3D {
     hatChannelProfile()
         .extruded(height: length)
-        .rotated(y: 90°)
-        .rotated(z: 180°)
+        .rotated(y: 90°)   // Orient along X axis (across boat width)
         .translated(x: length/2)
         .withMaterial(.steel)
 }
@@ -381,10 +410,10 @@ func frameAssembly() -> any Geometry3D {
     let spacing = Dims.mainPontoonCenterToCenter
     let mainDia = Dims.Main.diameter
     let beamTotalH = Dims.MainBeam.stemHeight + Dims.MainBeam.flangeThickness
-    let channelDepth: Double = 0.75  // How deep channels are cut into pontoon
+    let channelDepth: Double = 1.0  // How deep T-slot channels are (matches tSlotProfile)
 
-    // Main beams sit in channels - flange on pontoon surface, stem in channel
-    let beamZ = mainDia/2 - channelDepth  // Bottom of stem in channel
+    // Main beams sit in T-slot channels - stem goes into slot, flange on pontoon surface
+    let beamZ = mainDia/2 - channelDepth  // Bottom of stem sits at bottom of T-slot
 
     // Crossmember positions (evenly distributed)
     let crossmemberSpacing = length / Double(Dims.crossmemberCount)
