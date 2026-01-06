@@ -1,14 +1,78 @@
-# WeaselToonCadova: Boat Model in Swift
+# WeaselToonCadova: Vibe-Coded Boat Model
 
-I started exploring [Cadova](https://github.com/tomasf/Cadova), which lets one express CAD designs in [Swift](https://www.swift.org).
+This repository describes an experiment in using multi-modal LLMs to create deterministically reproducible 3D models in an agentic loop.  
+
+Simply put, it's testing if LLMs can build a 3D model by looking at a reference picture and text information and evolving a solution.
+
+*Prompt Goal:*
+`I've attached pictures of the my boat's 3D model and pasted text information about it.  Create a 3D model in Swift for it.`
+
+# Background 
+
+I started exploring [Cadova](https://github.com/tomasf/Cadova), which lets one express CAD designs in [Swift](https://www.swift.org), a popular programming language.
 
 I built a pontoon boat with a kit from [TinyPontoonBoats.com](https://www.tinypontoonboats.com).   I have a 3D CAD model of it:
 
-<p align="center"><a href="./pics/pontoon_cad.png"><img src="./pics/pontoon_cad.jpg" alt="Fusion 360 CAD" width='100'/></a></p>
+<p align="center"><a href="./pics/pontoon_cad.png"><img src="./pics/pontoon_cad.jpg" alt="Fusion 360 CAD" width='50%'/></a></p>
 
-I had recently iterated with Claude on engineering an upgrade to my pontoon design.  Then after reading about [Cadova on HackerNews](https://news.ycombinator.com/item?id=46442624), I decided to vibe-code a Swift version of my boat.
+I had recently iterated with Claude on engineering an upgrade to my pontoon design.  I asked it questions about if I should use steel or aluminum and then asked it questions about the sturdiness of my design.  I itereated with it, asking questions to come up with a final solution that I modeled in Fusion 360.
 
-I by visually and textually iterating with Claude, having it write Swift code to express the Pontoon and then iterating via more screenshots and prompts.
+In the middle of [commenting](https://news.ycombinator.com/item?id=46480556) on a post about the [Cadova library on HackerNews](https://news.ycombinator.com/item?id=46442624), I realized that I could try this experiment:  I decided to vibe-code a Swift version of my boat.
+
+## Producing Models from Picture via Code
+
+The kernel of my idea is combining the multi-modal LLM capabilities (meaning thenm "understanding" text AND pictures) with their ability to code, to create 3D models from pictures.
+
+I explored this concept in November 2024, in this [OllamaTea `ot-timechart`](https://github.com/NimbleMarkets/ollamatea/blob/main/cmd/ot-timechart/README.md#ot-timechart).  I made a program that graphed data and described the output.  It converged my [`dbn-go` market data library](https://github.com/NimbleMarkets/dbn-go), my [`ntcharts` TUI charting](https://github.com/NimbleMarkets/ntcharts) library, and my [OllamaTea chat component](https://github.com/NimbleMarkets/ollamatea) in an absolutely magical way:
+
+<p align="center"><a href="https://github.com/NimbleMarkets/ollamatea/blob/main/cmd/ot-timechart/README.md#ot-timechart"><img src="https://github.com/NimbleMarkets/ollamatea/raw/main/cmd/ot-timechart/demo.gif" alt="inferencing on a chart" /></a></p>
+
+When you watch LLMs like Claude work, you can see them create human artifacts in "code".  They generate HTML files, Markdown text files, DOCX Word files, PPT Powerpoint, SVG files for images.  These are all textual expressions that become rendered for human consumption.
+
+Of course, LLMs can also code, in many languages!  One of those languages is Swift, which is used heavily in the Apple ecosystem.  It can also run in the command line on many systems.
+
+Normally, one might give a picture to an LLM and ask a question about it, like `what is in the foreground?`, and the response will be a text description.  But that text description is for a human, you could also ask if for *code* about it.  
+
+For my problem of `make a 3D model from this picture`, the LLM needs a way to create a 3D model, the software vocabulary to express 3D objects.  Enter Cadova...
+
+[Cadova](https://github.com/tomasf/Cadova) is a Swift library which expresses [Constructive Solid Geometry](https://en.wikipedia.org/wiki/Constructive_solid_geometry) in code.  That code can generate 3D models in the [3MF file format](https://en.wikipedia.org/wiki/3D_Manufacturing_Format), which may be imported into CAD and VR engines.
+
+So I can give the LLM a picture and a prompt and any context, and ask it to create code for me about it.  In my case, I have a picture of a 3D model of my boat.   I will prompt it that I want it to use Cadova, and through thinking it realizes what it must do.
+
+*Prompt:*
+`I just learned about this Cadova project that can create solid
+    geometry in swift.    I just uploaded a screenshots of the CAD
+    my boat.  Can you estimate its 3d CSG structure and express it
+    in swift with Cadova?`
+    `
+
+An *agentic loop* is roughly the idea that humans and LLMs together evolve some artifact in a cycle.   LLMs generates artifact, human examines and redirects LLM with prompt, and the LLM tries again.  This can happen with varying levels of human involvement and automation, toward an extreme of no human in the loop and the LLM is identifying the issues itself.
+
+So the gist of what we are doing is making an agentic loop to create the model.  I detail the journey in [Take 1](#take-1---claude-desktop) and [Take 2](#take-2---claude-code) sections below. 
+
+Take 1 is the human-in-the-loop:
+
+  * Prompting for a Swift project to generate a 3MF model, starting with the reference picture and other text info.
+
+  * Human creates the project and copies the Swift file in.  We build and run the project, having the LLM fix any syntax errors.  A successful run results in a 3MF file.
+
+  * Once we have a model, we as humans can can load it into a viewer and comment on what's wrong.  We also take a screenshot.
+
+  * We paste the screenshot in the LLM and prompt about the issues and ask it to update the code.
+
+  * We keep doing all that until we are happy with the results.
+
+Take 2 ends in the fully-automated:
+
+ * LLM runs project and generates 3MF file, sees any syntax error and correcting it itself.
+
+ * LLM decides the most appropriate camera position and uses a tool to generate a view of the model from that position.  The view is rendered to an image.
+
+ * The LLM loads the image and decides what it wants to change about it, based on the new image and the context of the previous images and refereces.
+
+ * The LLM changes the Swift code per the previous step and tries it all again.
+
+That's the idea and it worked, in the sense that it did it.  Read on for details.
 
 ## Take 1 - Claude Desktop
 
@@ -16,13 +80,13 @@ I started by launching Claude Desktop and referring to an earlier conversation I
 
 Here's what the start of the conversation looked like:
 
-<p align="center"><a href="./pics/prompt_1.png"><img src="./pics/prompt_1.png" alt="intial prompt to Claude and resulting thoughts" width='200'/></a></p>
+<p align="center"><a href="./pics/prompt_1.png"><img src="./pics/prompt_1.png" alt="intial prompt to Claude and resulting thoughts" width='50%'/></a></p>
 
 After less than a minute, it produced the code in this [first commit](https://github.com/ConAcademy/WeaselToonCadova/commit/33ed0a0a32ab1c35739ae63ca98307d10ac30d91).  The code from it actually didn't work, but I pasted the error and asked Claude to fix it and after the next round it compiled and created a 3mf file. 
 
 Here's the initial result in [Cadova Viewer](https://github.com/tomasf/CadovaViewer) (a simple 3MF viewer):
 
-<p align="center"><a href="./pics/pontoon_swift_first.png"><img src="./pics/pontoon_swift_first.jpg" alt="Fusion 360 CAD" width='200'/></a></p>
+<p align="center"><a href="./pics/pontoon_swift_first.png"><img src="./pics/pontoon_swift_first.jpg" alt="Fusion 360 CAD" width='50%'/></a></p>
 
 First I set things up:
 
